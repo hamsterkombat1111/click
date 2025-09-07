@@ -41,6 +41,12 @@
                 
                 <button type="submit" class="btn" id="registerBtn">Зарегистрироваться</button>
             </form>
+			
+			<div class="features">
+                <div class="feature-card">
+                    <h3>Зачем нужен Email?</h3>
+                    <p>Это банальная защита от SQL инъекции. Вы можете ввести любой Email ТОЛЬКО ЗАПОМНИТЕ ЕГО!!!</p>
+                </div>
             
             <p class="auth-link">
                 Уже есть аккаунт? <a href="login.html">Войдите здесь</a>
@@ -53,17 +59,16 @@
     </div>
 
     <script>
-        // Инициализация Supabase
-        const SUPABASE_URL = 'https://ghpcfjbissjxazdepndr.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdocGNmamJpc3NqeGF6ZGVwbmRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcyMTU0NzgsImV4cCI6MjA3Mjc5MTQ3OH0.7K84ZwQVZ07Ode98druvxnrR9HbjMpotegorn1Ncex8';
-        
         document.addEventListener('DOMContentLoaded', function() {
+            // Ждем пока Supabase загрузится
             if (typeof supabase === 'undefined') {
-                showAlert('Ошибка: Supabase не загружен');
-                console.error('Supabase не определен');
+                document.getElementById('alertBox').innerHTML = 'Ошибка: Supabase не загружен';
                 return;
             }
 
+            // Инициализация Supabase
+            const SUPABASE_URL = 'https://ghpcfjbissjxazdepndr.supabase.co';
+            const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdocGNmamJpc3NqeGF6ZGVwbmRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcyMTU0NzgsImV4cCI6MjA3Mjc5MTQ3OH0.7K84ZwQVZ07Ode98druvxnrR9HbjMpotegorn1Ncex8';
             const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
             const registerForm = document.getElementById('registerForm');
@@ -122,17 +127,19 @@
                                 showAlert('Email уже зарегистрирован');
                             }
                         } else {
-                            showAlert('Ошибка базы данных');
+                            showAlert('Ошибка базы данных: ' + error.message);
                         }
                         return;
                     }
+
+                    const userId = data[0].id;
 
                     // Создаем запись кликов
                     await supabaseClient
                         .from('user_clicks')
                         .insert([
                             {
-                                user_id: data[0].id,
+                                user_id: userId,
                                 clicks: 0
                             }
                         ]);
@@ -142,7 +149,7 @@
                         .from('leaderboard')
                         .insert([
                             {
-                                user_id: data[0].id,
+                                user_id: userId,
                                 username: username,
                                 total_clicks: 0
                             }
@@ -155,7 +162,7 @@
 
                 } catch (error) {
                     console.error('Ошибка регистрации:', error);
-                    showAlert('Ошибка регистрации');
+                    showAlert('Ошибка регистрации: ' + error.message);
                 } finally {
                     registerBtn.disabled = false;
                     registerBtn.textContent = 'Зарегистрироваться';

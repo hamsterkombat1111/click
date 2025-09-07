@@ -10,7 +10,7 @@
 <body>
     <div class="container">
         <header>
-            <h1>🎮 Epic Clicker</h1>
+            <h1>Кликер</h1>
             <div id="authState" class="auth-state">
                 <span id="userGreeting"></span>
                 <button id="authButton" class="btn" style="display: none;">Войти</button>
@@ -61,12 +61,19 @@
     </div>
 
     <script>
-        // Инициализация Supabase
-        const SUPABASE_URL = 'https://ghpcfjbissjxazdepndr.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdocGNmamJpc3NqeGF6ZGVwbmRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcyMTU0NzgsImV4cCI6MjA3Mjc5MTQ3OH0.7K84ZwQVZ07Ode98druvxnrR9HbjMpotegorn1Ncex8';
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
         document.addEventListener('DOMContentLoaded', function() {
+            // Проверяем что Supabase загрузился
+            if (typeof supabase === 'undefined') {
+                document.getElementById('topPlayer').textContent = 'Ошибка загрузки';
+                document.getElementById('totalClicks').textContent = '0';
+                return;
+            }
+
+            // Инициализация Supabase
+            const SUPABASE_URL = 'https://ghpcfjbissjxazdepndr.supabase.co';
+            const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdocGNmamJpc3NqeGF6ZGVwbmRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcyMTU0NzgsImV4cCI6MjA3Mjc5MTQ3OH0.7K84ZwQVZ07Ode98druvxnrR9HbjMpotegorn1Ncex8';
+            const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
             const authButton = document.getElementById('authButton');
             const userGreeting = document.getElementById('userGreeting');
             
@@ -79,7 +86,6 @@
                     sessionStorage.removeItem('currentUser');
                     window.location.reload();
                 };
-                // Перенаправляем в игру если авторизован
                 setTimeout(() => window.location.href = 'game.html', 2000);
             } else {
                 userGreeting.textContent = 'Добро пожаловать!';
@@ -88,14 +94,12 @@
             }
             authButton.style.display = 'inline-block';
             
-            // Загружаем статистику
-            loadStats();
+            loadStats(supabaseClient);
         });
 
-        async function loadStats() {
+        async function loadStats(supabaseClient) {
             try {
-                // Получаем топ игрока
-                const { data: leaderboard } = await supabase
+                const { data: leaderboard } = await supabaseClient
                     .from('leaderboard')
                     .select('*')
                     .order('total_clicks', { ascending: false })
@@ -106,8 +110,7 @@
                         `${leaderboard[0].username} (${leaderboard[0].total_clicks} кликов)`;
                 }
                 
-                // Получаем общее количество кликов
-                const { data: total } = await supabase
+                const { data: total } = await supabaseClient
                     .from('user_clicks')
                     .select('clicks');
                 

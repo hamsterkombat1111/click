@@ -43,6 +43,7 @@
                 
                 <div class="game-actions">
                     <button id="saveBtn" class="btn">💾 Сохранить сейчас</button>
+                    <button id="debugBtn" class="btn btn-secondary">🐛 Debug</button>
                     <button id="logoutBtn" class="btn btn-secondary">🚪 Выйти</button>
                 </div>
             </div>
@@ -54,19 +55,25 @@
     </div>
 
     <script>
-        // Инициализация Supabase
-        const SUPABASE_URL = 'https://ghpcfjbissjxazdepndr.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdocGNmamJpc3NqeGF6ZGVwbmRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcyMTU0NzgsImV4cCI6MjA3Mjc5MTQ3OH0.7K84ZwQVZ07Ode98druvxnrR9HbjMpotegorn1Ncex8';
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-        let clickCount = 0;
-        let localClicks = 0;
-        let lastClickTime = 0;
-        let clickVelocity = 0;
-        let updateInterval;
-        let saveTimer = 5;
-
         document.addEventListener('DOMContentLoaded', function() {
+            // Проверяем что Supabase загрузился
+            if (typeof supabase === 'undefined') {
+                alert('Ошибка: Supabase не загружен! Обнови страницу.');
+                return;
+            }
+
+            // Инициализация Supabase
+            const SUPABASE_URL = 'https://ghpcfjbissjxazdepndr.supabase.co';
+            const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdocGNmamJpc3NqeGF6ZGVwbmRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcyMTU0NzgsImV4cCI6MjA3Mjc5MTQ3OH0.7K84ZwQVZ07Ode98druvxnrR9HbjMpotegorn1Ncex8';
+            const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+            let clickCount = 0;
+            let localClicks = 0;
+            let lastClickTime = 0;
+            let clickVelocity = 0;
+            let updateInterval;
+            let saveTimer = 5;
+
             const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
             
             if (!currentUser) {
@@ -90,16 +97,11 @@
                 handleClick();
             });
             
-            // Также обрабатываем клики по всей области
-            clickArea.addEventListener('touchstart', function(e) {
-                e.preventDefault();
-                handleClick();
-            });
-            
             function handleClick() {
                 clickCount++;
                 localClicks++;
                 clickCounter.textContent = clickCount.toLocaleString();
+                document.getElementById('userClicks').textContent = clickCount.toLocaleString();
                 
                 // Расчет скорости кликов
                 const now = Date.now();
@@ -112,14 +114,7 @@
                 
                 // Анимация клика
                 clickArea.style.transform = 'scale(0.95)';
-                setTimeout(() => {
-                    clickArea.style.transform = 'scale(1)';
-                }, 100);
-                
-                // Вибрация (если поддерживается)
-                if (navigator.vibrate) {
-                    navigator.vibrate(10);
-                }
+                setTimeout(() => clickArea.style.transform = 'scale(1)', 100);
             }
             
             // Таймер автосохранения
@@ -127,7 +122,27 @@
             
             // Кнопка ручного сохранения
             document.getElementById('saveBtn').addEventListener('click', () => {
+                console.log('Ручное сохранение...');
                 saveClicks(currentUser.id);
+            });
+
+            // Кнопка дебага
+            document.getElementById('debugBtn').addEventListener('click', () => {
+                console.log('=== DEBUG INFO ===');
+                console.log('User ID:', currentUser.id);
+                console.log('Click count:', clickCount);
+                console.log('Local clicks:', localClicks);
+                console.log('Save timer:', saveTimer);
+                
+                // Проверяем подключение к Supabase
+                supabaseClient.from('users').select('count').limit(1)
+                    .then(({ error }) => {
+                        if (error) {
+                            console.log('Supabase connection error:', error);
+                        } else {
+                            console.log('Supabase connection: OK');
+                        }
+                    });
             });
             
             // Выход
@@ -135,194 +150,213 @@
                 sessionStorage.removeItem('currentUser');
                 window.location.href = 'index.html';
             });
-            
-            // Горячие клавиши
-            document.addEventListener('keydown', function(e) {
-                if (e.code === 'Space' || e.code === 'Enter') {
-                    e.preventDefault();
-                    handleClick();
-                }
-            });
-        });
 
-        async function loadUserClicks(userId) {
-            try {
-                console.log('Загрузка кликов для пользователя:', userId);
-                
-                const { data: clicks, error } = await supabase
-                    .from('user_clicks')
-                    .select('clicks')
-                    .eq('user_id', userId)
-                    .single();
-
-                if (error) {
-                    console.error('Ошибка загрузки кликов:', error);
-                    // Создаем запись если не существует
-                    const { error: insertError } = await supabase
+            async function loadUserClicks(userId) {
+                try {
+                    console.log('Загрузка кликов для пользователя:', userId);
+                    
+                    const { data: clicks, error } = await supabaseClient
                         .from('user_clicks')
-                        .insert([{ 
-                            user_id: userId, 
-                            clicks: 0,
-                            last_updated: new Date().toISOString()
-                        }]);
-                    
-                    if (insertError) {
-                        console.error('Ошибка создания записи кликов:', insertError);
+                        .select('clicks, last_updated')
+                        .eq('user_id', userId)
+                        .single();
+
+                    console.log('Результат загрузки:', { data: clicks, error });
+
+                    if (error) {
+                        console.error('Ошибка загрузки кликов:', error);
+                        // Создаем запись если не существует
+                        const { data: insertData, error: insertError } = await supabaseClient
+                            .from('user_clicks')
+                            .insert([{ 
+                                user_id: userId, 
+                                clicks: 0,
+                                last_updated: new Date().toISOString()
+                            }])
+                            .select();
+                        
+                        console.log('Создание новой записи:', { data: insertData, error: insertError });
+                        
+                        if (insertError) {
+                            console.error('Ошибка создания записи кликов:', insertError);
+                        } else {
+                            clickCount = 0;
+                        }
+                    } else {
+                        clickCount = clicks.clicks;
+                        console.log('Загружено кликов:', clickCount, 'Последнее обновление:', clicks.last_updated);
                     }
+
+                    document.getElementById('clickCounter').textContent = clickCount.toLocaleString();
+                    document.getElementById('userClicks').textContent = clickCount.toLocaleString();
                     
-                    clickCount = 0;
-                } else {
-                    clickCount = clicks.clicks;
-                    console.log('Загружено кликов:', clickCount);
+                    // Обновляем лидерборд
+                    updateUserRank(userId);
+                    
+                } catch (error) {
+                    console.error('Ошибка загрузки кликов:', error);
                 }
-
-                document.getElementById('clickCounter').textContent = clickCount.toLocaleString();
-                document.getElementById('userClicks').textContent = clickCount.toLocaleString();
-                
-                // Обновляем лидерборд
-                updateLeaderboard(userId);
-                
-            } catch (error) {
-                console.error('Ошибка загрузки кликов:', error);
             }
-        }
 
-        async function saveClicks(userId) {
-            if (localClicks === 0) {
-                console.log('Нет новых кликов для сохранения');
-                return;
-            }
-            
-            try {
-                console.log('Сохранение кликов:', localClicks);
-                
-                const { error } = await supabase
-                    .from('user_clicks')
-                    .upsert({
-                        user_id: userId,
-                        clicks: clickCount,
-                        last_updated: new Date().toISOString()
-                    });
-                
-                if (error) {
-                    console.error('Ошибка сохранения кликов:', error);
-                    throw error;
-                }
-                
-                console.log('Клики сохранены:', localClicks);
-                localClicks = 0;
-                saveTimer = 5;
-                document.getElementById('updateTimer').textContent = '5с';
-                
-                // Показываем уведомление
-                showTempMessage('✅ Клики сохранены!');
-                
-                // Обновляем лидерборд
-                updateLeaderboard(userId);
-                
-            } catch (error) {
-                console.error('Ошибка сохранения кликов:', error);
-                showTempMessage('❌ Ошибка сохранения');
-            }
-        }
-
-        async function updateLeaderboard(userId) {
-            try {
-                const { data: user, error: userError } = await supabase
-                    .from('users')
-                    .select('username')
-                    .eq('id', userId)
-                    .single();
-                
-                if (userError) {
-                    console.error('Ошибка получения username:', userError);
+            async function saveClicks(userId) {
+                if (localClicks === 0) {
+                    console.log('Нет новых кликов для сохранения');
                     return;
                 }
                 
-                if (user) {
-                    const { error: leaderboardError } = await supabase
-                        .from('leaderboard')
-                        .upsert({
-                            user_id: userId,
-                            username: user.username,
-                            total_clicks: clickCount,
-                            last_updated: new Date().toISOString()
-                        });
+                try {
+                    console.log('Сохранение кликов:', localClicks, 'Общее количество:', clickCount);
                     
-                    if (leaderboardError) {
-                        console.error('Ошибка обновления лидерборда:', leaderboardError);
-                    }
-                }
-                
-                updateUserRank(userId);
-            } catch (error) {
-                console.error('Ошибка обновления лидерборда:', error);
-            }
-        }
+                    // ПРАВИЛЬНЫЙ SPABASE UPSERT
+                    const { data, error } = await supabaseClient
+                        .from('user_clicks')
+                        .update({
+                            clicks: clickCount,
+                            last_updated: new Date().toISOString()
+                        })
+                        .eq('user_id', userId); // Обновляем по user_id
+                    
+                    console.log('Результат сохранения:', { data, error });
 
-        async function updateUserRank(userId) {
-            try {
-                const { data: leaderboard, error } = await supabase
-                    .from('leaderboard')
-                    .select('*')
-                    .order('total_clicks', { ascending: false });
-                
-                if (error) {
-                    console.error('Ошибка загрузки лидерборда:', error);
-                    return;
-                }
-                
-                if (leaderboard) {
-                    const rank = leaderboard.findIndex(item => item.user_id === userId) + 1;
-                    document.getElementById('userRank').textContent = `#${rank}`;
-                }
-            } catch (error) {
-                console.error('Ошибка обновления ранга:', error);
-            }
-        }
-
-        function startSaveTimer() {
-            updateInterval = setInterval(async () => {
-                saveTimer--;
-                document.getElementById('updateTimer').textContent = `${saveTimer}с`;
-                
-                if (saveTimer <= 0) {
-                    const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
-                    if (currentUser && localClicks > 0) {
-                        await saveClicks(currentUser.id);
+                    if (error) {
+                        console.error('Ошибка сохранения кликов:', error);
+                        // Если update не сработал, пробуем insert
+                        const { data: insertData, error: insertError } = await supabaseClient
+                            .from('user_clicks')
+                            .insert({
+                                user_id: userId,
+                                clicks: clickCount,
+                                last_updated: new Date().toISOString()
+                            });
+                        
+                        console.log('Попытка insert:', { data: insertData, error: insertError });
+                        
+                        if (insertError) {
+                            throw insertError;
+                        }
                     }
+                    
+                    console.log('Клики сохранены успешно! Сохранено:', localClicks);
+                    localClicks = 0;
                     saveTimer = 5;
+                    document.getElementById('updateTimer').textContent = '5с';
+                    
+                    // Показываем уведомление
+                    showTempMessage('✅ Клики сохранены!');
+                    
+                    // Обновляем лидерборд
+                    updateLeaderboard(userId);
+                    
+                } catch (error) {
+                    console.error('Ошибка сохранения кликов:', error);
+                    alert('Ошибка сохранения: ' + error.message);
                 }
-            }, 1000);
-        }
-
-        function showTempMessage(message) {
-            const tempMsg = document.createElement('div');
-            tempMsg.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                background: #4CAF50;
-                color: white;
-                padding: 10px 20px;
-                border-radius: 5px;
-                z-index: 1000;
-                font-weight: bold;
-            `;
-            tempMsg.textContent = message;
-            document.body.appendChild(tempMsg);
-            
-            setTimeout(() => {
-                document.body.removeChild(tempMsg);
-            }, 2000);
-        }
-
-        // Предотвращаем скролл при клике на мобильных
-        document.addEventListener('touchmove', function(e) {
-            if (e.target.closest('.click-area')) {
-                e.preventDefault();
             }
-        }, { passive: false });
+
+            async function updateLeaderboard(userId) {
+                try {
+                    const { data: user, error: userError } = await supabaseClient
+                        .from('users')
+                        .select('username')
+                        .eq('id', userId)
+                        .single();
+                    
+                    if (userError) {
+                        console.error('Ошибка получения username:', userError);
+                        return;
+                    }
+                    
+                    if (user) {
+                        // ПРАВИЛЬНЫЙ UPSERT для leaderboard
+                        const { data: lbData, error: leaderboardError } = await supabaseClient
+                            .from('leaderboard')
+                            .update({
+                                username: user.username,
+                                total_clicks: clickCount,
+                                last_updated: new Date().toISOString()
+                            })
+                            .eq('user_id', userId);
+                        
+                        console.log('Обновление лидерборда:', { data: lbData, error: leaderboardError });
+                        
+                        if (leaderboardError) {
+                            console.error('Ошибка обновления лидерборда:', leaderboardError);
+                            // Пробуем insert если update не сработал
+                            await supabaseClient
+                                .from('leaderboard')
+                                .insert({
+                                    user_id: userId,
+                                    username: user.username,
+                                    total_clicks: clickCount,
+                                    last_updated: new Date().toISOString()
+                                });
+                        }
+                    }
+                    
+                    updateUserRank(userId);
+                } catch (error) {
+                    console.error('Ошибка обновления лидерборда:', error);
+                }
+            }
+
+            async function updateUserRank(userId) {
+                try {
+                    const { data: leaderboard, error } = await supabaseClient
+                        .from('leaderboard')
+                        .select('*')
+                        .order('total_clicks', { ascending: false });
+                    
+                    if (error) {
+                        console.error('Ошибка загрузки лидерборда:', error);
+                        return;
+                    }
+                    
+                    if (leaderboard) {
+                        const rank = leaderboard.findIndex(item => item.user_id === userId) + 1;
+                        document.getElementById('userRank').textContent = `#${rank}`;
+                        console.log('Ранг пользователя обновлен:', rank);
+                    }
+                } catch (error) {
+                    console.error('Ошибка обновления ранга:', error);
+                }
+            }
+
+            function startSaveTimer() {
+                updateInterval = setInterval(async () => {
+                    saveTimer--;
+                    document.getElementById('updateTimer').textContent = `${saveTimer}с`;
+                    
+                    if (saveTimer <= 0) {
+                        if (localClicks > 0) {
+                            console.log('Автосохранение...');
+                            await saveClicks(currentUser.id);
+                        }
+                        saveTimer = 5;
+                    }
+                }, 1000);
+            }
+
+            function showTempMessage(message) {
+                const tempMsg = document.createElement('div');
+                tempMsg.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: #4CAF50;
+                    color: white;
+                    padding: 10px 20px;
+                    border-radius: 5px;
+                    z-index: 1000;
+                    font-weight: bold;
+                `;
+                tempMsg.textContent = message;
+                document.body.appendChild(tempMsg);
+                
+                setTimeout(() => {
+                    document.body.removeChild(tempMsg);
+                }, 2000);
+            }
+        });
     </script>
 </body>
 </html>
