@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Кликер - Главная</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎮 Epic Clicker</h1>
+            <div id="authState" class="auth-state">
+                <span id="userGreeting"></span>
+                <button id="authButton" class="btn" style="display: none;">Войти</button>
+            </div>
+        </header>
+        
+        <main class="main-content">
+            <div class="welcome-text">
+                <h2>Кликни путь к славе! 🏆</h2>
+                <p>Соревнуйся с другими игроками и стань королем кликов!</p>
+            </div>
+            
+            <div class="stats-preview">
+                <div class="stat-card">
+                    <h3>🎯 Топ-1 игрок</h3>
+                    <span id="topPlayer">Загрузка...</span>
+                </div>
+                <div class="stat-card">
+                    <h3>🔥 Всего кликов</h3>
+                    <span id="totalClicks">0</span>
+                </div>
+            </div>
+            
+            <div class="auth-buttons">
+                <a href="login.html" class="btn">Вход</a>
+                <a href="register.html" class="btn btn-secondary">Регистрация</a>
+            </div>
+            
+            <div class="features">
+                <div class="feature-card">
+                    <h3>🏆 Лидерборд</h3>
+                    <p>Смотри кто на вершине</p>
+                </div>
+                <div class="feature-card">
+                    <h3>💾 Сохранение</h3>
+                    <p>Твои клики всегда с тобой</p>
+                </div>
+                <div class="feature-card">
+                    <h3>⚡ Быстро</h3>
+                    <p>Мгновенные обновления</p>
+                </div>
+            </div>
+        </main>
+        
+        <footer>
+            <p>Epic Clicker | Supabase + PostgreSQL</p>
+        </footer>
+    </div>
+
+    <script>
+        // Инициализация Supabase
+        const SUPABASE_URL = 'https://ghpcfjbissjxazdepndr.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdocGNmamJpc3NqeGF6ZGVwbmRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcyMTU0NzgsImV4cCI6MjA3Mjc5MTQ3OH0.7K84ZwQVZ07Ode98druvxnrR9HbjMpotegorn1Ncex8';
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const authButton = document.getElementById('authButton');
+            const userGreeting = document.getElementById('userGreeting');
+            
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            
+            if (currentUser) {
+                userGreeting.textContent = `Привет, ${currentUser.username}!`;
+                authButton.textContent = 'Выйти';
+                authButton.onclick = () => {
+                    sessionStorage.removeItem('currentUser');
+                    window.location.reload();
+                };
+                // Перенаправляем в игру если авторизован
+                setTimeout(() => window.location.href = 'game.html', 2000);
+            } else {
+                userGreeting.textContent = 'Добро пожаловать!';
+                authButton.textContent = 'Войти';
+                authButton.onclick = () => window.location.href = 'login.html';
+            }
+            authButton.style.display = 'inline-block';
+            
+            // Загружаем статистику
+            loadStats();
+        });
+
+        async function loadStats() {
+            try {
+                // Получаем топ игрока
+                const { data: leaderboard } = await supabase
+                    .from('leaderboard')
+                    .select('*')
+                    .order('total_clicks', { ascending: false })
+                    .limit(1);
+                
+                if (leaderboard && leaderboard.length > 0) {
+                    document.getElementById('topPlayer').textContent = 
+                        `${leaderboard[0].username} (${leaderboard[0].total_clicks} кликов)`;
+                }
+                
+                // Получаем общее количество кликов
+                const { data: total } = await supabase
+                    .from('user_clicks')
+                    .select('clicks');
+                
+                if (total) {
+                    const totalClicks = total.reduce((sum, item) => sum + item.clicks, 0);
+                    document.getElementById('totalClicks').textContent = totalClicks.toLocaleString();
+                }
+            } catch (error) {
+                console.error('Ошибка загрузки статистики:', error);
+            }
+        }
+    </script>
+</body>
+</html>

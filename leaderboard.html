@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Кликер - Лидерборд</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏆 Таблица лидеров</h1>
+            <div class="auth-state">
+                <a href="game.html" class="btn">🎮 Вернуться в игру</a>
+                <a href="index.html" class="btn btn-secondary">🏠 На главную</a>
+            </div>
+        </header>
+        
+        <main class="main-content">
+            <div class="leaderboard-container">
+                <h2>Топ-10 игроков</h2>
+                <div id="leaderboardList" class="leaderboard-list">
+                    <div class="leaderboard-item header">
+                        <span>Место</span>
+                        <span>Игрок</span>
+                        <span>Клики</span>
+                        <span>Обновлено</span>
+                    </div>
+                    <!-- Лидерборд будет здесь -->
+                </div>
+                
+                <div class="leaderboard-actions">
+                    <button id="refreshBtn" class="btn">🔄 Обновить</button>
+                </div>
+            </div>
+        </main>
+        
+        <footer>
+            <p>Epic Clicker | Live лидерборд</p>
+        </footer>
+    </div>
+
+    <script>
+        // Инициализация Supabase
+        const SUPABASE_URL = 'https://ghpcfjbissjxazdepndr.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdocGNmamJpc3NqeGF6ZGVwbmRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcyMTU0NzgsImV4cCI6MjA3Mjc5MTQ3OH0.7K84ZwQVZ07Ode98druvxnrR9HbjMpotegorn1Ncex8';
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        document.addEventListener('DOMContentLoaded', function() {
+            loadLeaderboard();
+            
+            document.getElementById('refreshBtn').addEventListener('click', loadLeaderboard);
+        });
+
+        async function loadLeaderboard() {
+            try {
+                const { data: leaderboard, error } = await supabase
+                    .from('leaderboard')
+                    .select('*')
+                    .order('total_clicks', { ascending: false })
+                    .limit(10);
+                
+                if (error) throw error;
+                
+                const leaderboardList = document.getElementById('leaderboardList');
+                leaderboardList.innerHTML = `
+                    <div class="leaderboard-item header">
+                        <span>Место</span>
+                        <span>Игрок</span>
+                        <span>Клики</span>
+                        <span>Обновлено</span>
+                    </div>
+                `;
+                
+                leaderboard.forEach((player, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'leaderboard-item';
+                    item.innerHTML = `
+                        <span class="rank">#${index + 1}</span>
+                        <span class="username">${player.username}</span>
+                        <span class="clicks">${player.total_clicks.toLocaleString()}</span>
+                        <span class="time">${new Date(player.last_updated).toLocaleTimeString()}</span>
+                    `;
+                    
+                    // Выделяем текущего пользователя
+                    const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+                    if (currentUser && currentUser.id === player.user_id) {
+                        item.classList.add('current-user');
+                    }
+                    
+                    // Выделяем топ-3
+                    if (index < 3) {
+                        item.classList.add(`top-${index + 1}`);
+                    }
+                    
+                    leaderboardList.appendChild(item);
+                });
+                
+            } catch (error) {
+                console.error('Ошибка загрузки лидерборда:', error);
+            }
+        }
+    </script>
+</body>
+</html>

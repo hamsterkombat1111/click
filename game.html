@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Кликер - Игра</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎮 Epic Clicker</h1>
+            <div class="auth-state">
+                <span id="userGreeting"></span>
+                <a href="leaderboard.html" class="btn">🏆 Таблица лидеров</a>
+                <a href="index.html" class="btn btn-secondary">← На главную</a>
+            </div>
+        </header>
+        
+        <main class="main-content">
+            <div class="game-container">
+                <div class="click-area" id="clickArea">
+                    <h2>КЛИКАЙ!</h2>
+                    <div class="click-counter" id="clickCounter">0</div>
+                    <div class="click-velocity" id="clickVelocity">0 кликов/сек</div>
+                </div>
+                
+                <div class="game-stats">
+                    <div class="stat">
+                        <h3>📊 Твои клики</h3>
+                        <span id="userClicks">0</span>
+                    </div>
+                    <div class="stat">
+                        <h3>🏆 Твое место</h3>
+                        <span id="userRank">#-</span>
+                    </div>
+                    <div class="stat">
+                        <h3>⏱️ Обновление через</h3>
+                        <span id="updateTimer">5с</span>
+                    </div>
+                </div>
+                
+                <div class="game-actions">
+                    <button id="saveBtn" class="btn">💾 Сохранить сейчас</button>
+                    <button id="logoutBtn" class="btn btn-secondary">🚪 Выйти</button>
+                </div>
+            </div>
+        </main>
+        
+        <footer>
+            <p>Epic Clicker | Автосохранение каждые 5 секунд</p>
+        </footer>
+    </div>
+
+    <script>
+        // Инициализация Supabase
+        const SUPABASE_URL = 'https://ghpcfjbissjxazdepndr.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdocGNmamJpc3NqeGF6ZGVwbmRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcyMTU0NzgsImV4cCI6MjA3Mjc5MTQ3OH0.7K84ZwQVZ07Ode98druvxnrR9HbjMpotegorn1Ncex8';
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let clickCount = 0;
+        let localClicks = 0;
+        let lastClickTime = 0;
+        let clickVelocity = 0;
+        let updateInterval;
+        let saveTimer = 5;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            
+            if (!currentUser) {
+                window.location.href = 'login.html';
+                return;
+            }
+
+            document.getElementById('userGreeting').textContent = `Игрок: ${currentUser.username}`;
+            
+            // Загружаем клики пользователя
+            loadUserClicks(currentUser.id);
+            
+            // Настройка клик области
+            const clickArea = document.getElementById('clickArea');
+            const clickCounter = document.getElementById('clickCounter');
+            const velocityDisplay = document.getElementById('clickVelocity');
+            
+            clickArea.addEventListener('click', function() {
+                clickCount++;
+                localClicks++;
+                clickCounter.textContent = clickCount.toLocaleString();
+                
+                // Расчет скорости кликов
+                const now = Date.now();
+                if (lastClickTime > 0) {
+                    const timeDiff = (now - lastClickTime) / 1000;
+                    clickVelocity = Math.round(1 / timeDiff);
+                    velocityDisplay.textContent = `${clickVelocity} кликов/сек`;
+                }
+                lastClickTime = now;
+                
+                // Анимация клика
+                clickArea.style.transform = 'scale(0.95)';
+                setTimeout(() => clickArea.style.transform = 'scale(1)', 100);
+            });
+            
+            // Таймер автосохранения
+            startSaveTimer();
+            
+            // Кнопка ручного сохранения
+            document.getElementById('saveBtn').addEventListener('click', () => {
+                saveClicks(currentUser.id);
+            });
+            
+            // Выход
+            document.getElementById('logoutBtn').addEventListener('click', () => {
+                sessionStorage.removeItem('currentUser');
+                window.location.href = 'index.html';
+            });
+        });
+
+        async function loadUserClicks(userId) {
+            try {
+                const { data: clicks } = await supabase
+                    .from('user_clicks')
+                    .select('clicks')
+                    .eq('user_id', userId)
+                    .single();
+                
+                if (clicks) {
+                    clickCount = clicks.clicks;
+                    document.getElementById('clickCounter').textContent = clickCount.toLocaleString();
+                    document.getElementById('userClicks').textContent = clickCount.toLocaleString();
+                }
+                
+                // Загружаем позицию в рейтинге
+                updateUserRank(userId);
+            } catch (error) {
+                console.error('Ошибка загрузки кликов:', error);
+            }
+        }
+
+        async function saveClicks(userId) {
+            if (localClicks === 0) return;
+            
+            try {
+                const { error } = await supabase
+                    .from('user_clicks')
+                    .upsert({
+                        user_id: userId,
+                        clicks: clickCount,
+                        last_updated: new Date().toISOString()
+                    });
+                
+                if (error) throw error;
+                
+                console.log('Клики сохранены:', localClicks);
+                localClicks = 0;
+                saveTimer = 5;
+                document.getElementById('updateTimer').textContent = '5с';
+                
+                // Обновляем лидерборд
+                updateLeaderboard(userId);
+                
+            } catch (error) {
+                console.error('Ошибка сохранения кликов:', error);
+            }
+        }
+
+        async function updateLeaderboard(userId) {
+            try {
+                const { data: user } = await supabase
+                    .from('users')
+                    .select('username')
+                    .eq('id', userId)
+                    .single();
+                
+                if (user) {
+                    await supabase
+                        .from('leaderboard')
+                        .upsert({
+                            user_id: userId,
+                            username: user.username,
+                            total_clicks: clickCount,
+                            last_updated: new Date().toISOString()
+                        });
+                }
+                
+                updateUserRank(userId);
+            } catch (error) {
+                console.error('Ошибка обновления лидерборда:', error);
+            }
+        }
+
+        async function updateUserRank(userId) {
+            try {
+                const { data: leaderboard } = await supabase
+                    .from('leaderboard')
+                    .select('*')
+                    .order('total_clicks', { ascending: false });
+                
+                if (leaderboard) {
+                    const rank = leaderboard.findIndex(item => item.user_id === userId) + 1;
+                    document.getElementById('userRank').textContent = `#${rank}`;
+                }
+            } catch (error) {
+                console.error('Ошибка обновления ранга:', error);
+            }
+        }
+
+        function startSaveTimer() {
+            updateInterval = setInterval(async () => {
+                saveTimer--;
+                document.getElementById('updateTimer').textContent = `${saveTimer}с`;
+                
+                if (saveTimer <= 0) {
+                    const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+                    if (currentUser && localClicks > 0) {
+                        await saveClicks(currentUser.id);
+                    }
+                    saveTimer = 5;
+                }
+            }, 1000);
+        }
+    </script>
+</body>
+</html>
