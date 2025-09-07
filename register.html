@@ -137,6 +137,17 @@
                             }
                         ]);
 
+                    // Создаем запись в лидерборде
+                    await supabaseClient
+                        .from('leaderboard')
+                        .insert([
+                            {
+                                user_id: data[0].id,
+                                username: username,
+                                total_clicks: 0
+                            }
+                        ]);
+
                     showAlert('Регистрация успешна!', 'success');
                     setTimeout(() => {
                         window.location.href = 'login.html';

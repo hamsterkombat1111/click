@@ -74,6 +74,7 @@
                 return;
             }
 
+            console.log('Текущий пользователь:', currentUser);
             document.getElementById('userGreeting').textContent = `Игрок: ${currentUser.username}`;
             
             // Загружаем клики пользователя
@@ -120,19 +121,27 @@
 
         async function loadUserClicks(userId) {
             try {
-                const { data: clicks } = await supabase
+                const { data: clicks, error } = await supabase
                     .from('user_clicks')
                     .select('clicks')
                     .eq('user_id', userId)
                     .single();
-                
-                if (clicks) {
+
+                if (error) {
+                    console.error('Ошибка загрузки кликов:', error);
+                    // Создаем запись если не существует
+                    await supabase
+                        .from('user_clicks')
+                        .insert([{ user_id: userId, clicks: 0 }]);
+                    
+                    clickCount = 0;
+                } else {
                     clickCount = clicks.clicks;
-                    document.getElementById('clickCounter').textContent = clickCount.toLocaleString();
-                    document.getElementById('userClicks').textContent = clickCount.toLocaleString();
                 }
+
+                document.getElementById('clickCounter').textContent = clickCount.toLocaleString();
+                document.getElementById('userClicks').textContent = clickCount.toLocaleString();
                 
-                // Загружаем позицию в рейтинге
                 updateUserRank(userId);
             } catch (error) {
                 console.error('Ошибка загрузки кликов:', error);

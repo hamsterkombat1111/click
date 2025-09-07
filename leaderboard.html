@@ -61,7 +61,10 @@
                     .order('total_clicks', { ascending: false })
                     .limit(10);
                 
-                if (error) throw error;
+                if (error) {
+                    console.error('Ошибка загрузки лидерборда:', error);
+                    return;
+                }
                 
                 const leaderboardList = document.getElementById('leaderboardList');
                 leaderboardList.innerHTML = `
@@ -72,6 +75,15 @@
                         <span>Обновлено</span>
                     </div>
                 `;
+                
+                if (!leaderboard || leaderboard.length === 0) {
+                    leaderboardList.innerHTML += `
+                        <div class="leaderboard-item">
+                            <span colspan="4" style="text-align: center;">Пока нет игроков в рейтинге</span>
+                        </div>
+                    `;
+                    return;
+                }
                 
                 leaderboard.forEach((player, index) => {
                     const item = document.createElement('div');
