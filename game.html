@@ -85,7 +85,18 @@
             const clickCounter = document.getElementById('clickCounter');
             const velocityDisplay = document.getElementById('clickVelocity');
             
+            // Обработчик кликов
             clickArea.addEventListener('click', function() {
+                handleClick();
+            });
+            
+            // Также обрабатываем клики по всей области
+            clickArea.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                handleClick();
+            });
+            
+            function handleClick() {
                 clickCount++;
                 localClicks++;
                 clickCounter.textContent = clickCount.toLocaleString();
@@ -101,8 +112,15 @@
                 
                 // Анимация клика
                 clickArea.style.transform = 'scale(0.95)';
-                setTimeout(() => clickArea.style.transform = 'scale(1)', 100);
-            });
+                setTimeout(() => {
+                    clickArea.style.transform = 'scale(1)';
+                }, 100);
+                
+                // Вибрация (если поддерживается)
+                if (navigator.vibrate) {
+                    navigator.vibrate(10);
+                }
+            }
             
             // Таймер автосохранения
             startSaveTimer();
@@ -117,10 +135,20 @@
                 sessionStorage.removeItem('currentUser');
                 window.location.href = 'index.html';
             });
+            
+            // Горячие клавиши
+            document.addEventListener('keydown', function(e) {
+                if (e.code === 'Space' || e.code === 'Enter') {
+                    e.preventDefault();
+                    handleClick();
+                }
+            });
         });
 
         async function loadUserClicks(userId) {
             try {
+                console.log('Загрузка кликов для пользователя:', userId);
+                
                 const { data: clicks, error } = await supabase
                     .from('user_clicks')
                     .select('clicks')
@@ -130,28 +158,44 @@
                 if (error) {
                     console.error('Ошибка загрузки кликов:', error);
                     // Создаем запись если не существует
-                    await supabase
+                    const { error: insertError } = await supabase
                         .from('user_clicks')
-                        .insert([{ user_id: userId, clicks: 0 }]);
+                        .insert([{ 
+                            user_id: userId, 
+                            clicks: 0,
+                            last_updated: new Date().toISOString()
+                        }]);
+                    
+                    if (insertError) {
+                        console.error('Ошибка создания записи кликов:', insertError);
+                    }
                     
                     clickCount = 0;
                 } else {
                     clickCount = clicks.clicks;
+                    console.log('Загружено кликов:', clickCount);
                 }
 
                 document.getElementById('clickCounter').textContent = clickCount.toLocaleString();
                 document.getElementById('userClicks').textContent = clickCount.toLocaleString();
                 
-                updateUserRank(userId);
+                // Обновляем лидерборд
+                updateLeaderboard(userId);
+                
             } catch (error) {
                 console.error('Ошибка загрузки кликов:', error);
             }
         }
 
         async function saveClicks(userId) {
-            if (localClicks === 0) return;
+            if (localClicks === 0) {
+                console.log('Нет новых кликов для сохранения');
+                return;
+            }
             
             try {
+                console.log('Сохранение кликов:', localClicks);
+                
                 const { error } = await supabase
                     .from('user_clicks')
                     .upsert({
@@ -160,31 +204,43 @@
                         last_updated: new Date().toISOString()
                     });
                 
-                if (error) throw error;
+                if (error) {
+                    console.error('Ошибка сохранения кликов:', error);
+                    throw error;
+                }
                 
                 console.log('Клики сохранены:', localClicks);
                 localClicks = 0;
                 saveTimer = 5;
                 document.getElementById('updateTimer').textContent = '5с';
                 
+                // Показываем уведомление
+                showTempMessage('✅ Клики сохранены!');
+                
                 // Обновляем лидерборд
                 updateLeaderboard(userId);
                 
             } catch (error) {
                 console.error('Ошибка сохранения кликов:', error);
+                showTempMessage('❌ Ошибка сохранения');
             }
         }
 
         async function updateLeaderboard(userId) {
             try {
-                const { data: user } = await supabase
+                const { data: user, error: userError } = await supabase
                     .from('users')
                     .select('username')
                     .eq('id', userId)
                     .single();
                 
+                if (userError) {
+                    console.error('Ошибка получения username:', userError);
+                    return;
+                }
+                
                 if (user) {
-                    await supabase
+                    const { error: leaderboardError } = await supabase
                         .from('leaderboard')
                         .upsert({
                             user_id: userId,
@@ -192,6 +248,10 @@
                             total_clicks: clickCount,
                             last_updated: new Date().toISOString()
                         });
+                    
+                    if (leaderboardError) {
+                        console.error('Ошибка обновления лидерборда:', leaderboardError);
+                    }
                 }
                 
                 updateUserRank(userId);
@@ -202,10 +262,15 @@
 
         async function updateUserRank(userId) {
             try {
-                const { data: leaderboard } = await supabase
+                const { data: leaderboard, error } = await supabase
                     .from('leaderboard')
                     .select('*')
                     .order('total_clicks', { ascending: false });
+                
+                if (error) {
+                    console.error('Ошибка загрузки лидерборда:', error);
+                    return;
+                }
                 
                 if (leaderboard) {
                     const rank = leaderboard.findIndex(item => item.user_id === userId) + 1;
@@ -230,6 +295,34 @@
                 }
             }, 1000);
         }
+
+        function showTempMessage(message) {
+            const tempMsg = document.createElement('div');
+            tempMsg.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #4CAF50;
+                color: white;
+                padding: 10px 20px;
+                border-radius: 5px;
+                z-index: 1000;
+                font-weight: bold;
+            `;
+            tempMsg.textContent = message;
+            document.body.appendChild(tempMsg);
+            
+            setTimeout(() => {
+                document.body.removeChild(tempMsg);
+            }, 2000);
+        }
+
+        // Предотвращаем скролл при клике на мобильных
+        document.addEventListener('touchmove', function(e) {
+            if (e.target.closest('.click-area')) {
+                e.preventDefault();
+            }
+        }, { passive: false });
     </script>
 </body>
 </html>
